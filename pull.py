@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-@author: 袁永宏
+@author: yyh
 @project: pachong
 @file: pull.py
 @time: 2019/7/9 9:48
