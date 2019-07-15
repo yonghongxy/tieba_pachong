@@ -132,6 +132,8 @@ def set_post_list(tieba):
         post.author_portrait = __df_text_dict__['author_portrait']
         post.reply_num = __df_text_dict__['reply_num']
         post.is_top = __df_text_dict__['is_top']
+        post.tieba_name = tieba.name
+        post.source_page_num = tieba.currNum
         if len(item.select('div.j_th_tit ')) != 0:
             post.title = item.select('div.j_th_tit ')[0].a.text
         if len(item.select('.tb_icon_author')) > 0:
@@ -146,15 +148,15 @@ def set_post_list(tieba):
             set_post_list(tieba)
 
 
-def save_post(name, _post, num):
+def save_post(_post):
     txt_name = _post.title
     p = re.compile(r'[\/:*?"<>|]')
     txt_name = re.sub(p, "#", txt_name)
-    tieba_path = save_base_path + name + "\\第" + str(int(num / 50) + 1) + "页\\"
+    tieba_path = save_base_path + _post.tieba_name + "\\第" + str(_post.source_page_num) + "页\\"
     if not os.path.exists(tieba_path):
         os.makedirs(tieba_path)
     with open(tieba_path + txt_name + ".txt", 'w', encoding='utf-8') as post_file:
-        post_str = '\t|标题：%s \t|作者： %s \t|回帖数: %s \n' % (_post.title, _post.author_name, _post.reply_num)
+        post_str = '\t|标题：%s \t|作者： %s \t|回帖数: %s \n\n' % (_post.title, _post.author_name, _post.reply_num)
         post_file.write(post_str)
         for detail in _post.details:
             detail_str = '\t|回复:%s\n\t|回复人:%s\n\t|回复时间:%s\n\t|%s\n\t|评论数:%s' % (
@@ -166,22 +168,32 @@ def save_post(name, _post, num):
                         comment.content, comment.username, comment.now_time)
                     post_file.write(comment_str)
             post_file.write('\n\n')
+            imgs = detail.get_content_imgs()
+            for img in imgs:
+                save_img(img, tieba_path + '\\' + str(_post.id) + '\\' + str(detail.post_id) + '\\')
 
 
-def save_img(img_url, file_path='img'):
+def save_img(url, file_path):
     # 保存图片到磁盘文件夹 file_path中，默认为当前脚本运行目录下的 book\img文件夹
     try:
         if not os.path.exists(file_path):
             os.makedirs(file_path)
         # 获得图片后缀
-        file_suffix = url[url.rfind('.'):]
+        file_suffix = '.jpg'
+        if file_path.find('.png'):
+            file_suffix = '.png'
+        elif file_path.find('.gif'):
+            file_suffix = '.gif'
+        elif file_path.find('.jpeg'):
+            file_suffix = '.jpeg'
         file_name = url[url.rfind('/') + 1:url.rfind('.')]
         # 拼接图片名（包含路径）
         filename = '{}{}{}{}'.format(file_path, os.path.sep, file_name, file_suffix)
         # 下载图片，并保存到文件夹中
-        response = requests.get(img_url)
+        response = requests.get(url)
         with open(filename, 'wb') as f:
             f.write(response.content)
+        print('下载图片%s,完成！' % (url))
     except IOError as e:
         print('文件操作失败', e)
     except Exception as e:
@@ -205,8 +217,6 @@ if __name__ == '__main__':
     set_post_list(tieba)
     _post_list = tieba.posts
     print(len(_post_list))
-    num = 1
     for post in _post_list:
         set_post_detail(post)
-        save_post(tieba.name, post, num)
-        num = num + 1
+        save_post(post)

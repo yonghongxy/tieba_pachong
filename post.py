@@ -45,6 +45,8 @@ class Post(object):
         self.forum_id = forum_id
         self.pageNum = pageNum
         self.currNum = 1
+        self.source_page_num = 1
+        self.tieba_name = None
 
     def get_url(self):
         return "https://tieba.baidu.com/p/" + str(self.id) + "?pn=" + str(self.currNum)
@@ -95,7 +97,7 @@ class PostDetail(object):
             img_paths = []
             for img in imgs:
                 img_paths.append(img.attrs['src'])
-            return imgs
+            return img_paths
 
 
 class PostComment(object):
