@@ -31,6 +31,12 @@ def if_str_none(var):
         return var
 
 
+def get_dict_value(key, map):
+    if key in map.keys():
+        return map[key]
+    return ''
+
+
 # 获取帖子内容
 def set_post_detail(_post=None):
     if _post.details is None:
@@ -41,6 +47,22 @@ def set_post_detail(_post=None):
     if len(soup.select("div.pb_footer")) == 0:
         print('该帖已被删除')
         return
+
+    if _post.thread_id is None:
+        scripts = soup.find_all('script')
+        for sc in scripts:
+            bo = False
+            if sc.text.find('thread_id') >= 0:
+                thread_id_s = re.findall("thread_id(.+?),", sc.text)
+                for _tis in thread_id_s:
+                    thread_id = re.findall("\d+", _tis)[0]
+                    if len(thread_id) > 5:
+                        _post.thread_id = thread_id
+                        bo = True
+                        break
+            if bo:
+                break
+
     reply_num_spans = soup.select("div.pb_footer")[0].select('li.l_reply_num > span')
     _post.pageNum = reply_num_spans[1].text
     reply = soup.select("div.left_section")[0]
@@ -48,36 +70,41 @@ def set_post_detail(_post=None):
     i = 0
     for content in post_content_list:
         post_content = json.loads(content.attrs['data-field'])
+        json_content = post_content['content']
+        json_author = post_content['author']
         i = i + 1
-        if i == 1:
-            _post.thread_id = post_content['content']['thread_id']
-            _post.forum_id = post_content['content']['forum_id']
+        if i == 1 and _post.author_pic is not None:
             _post.author_pic = content.select("a.p_author_face > img")[0].attrs['src']
         post_detail = PostDetail()
-        post_detail.content = if_str_none(post_content['content']['content'])
-        post_detail.post_id = if_int_none(post_content['content']['post_id'])
-        post_detail.post_no = if_int_none(post_content['content']['post_no'])
-        post_detail.thread_id = if_int_none(post_content['content']['thread_id'])
-        post_detail.reply_num = if_int_none(post_content['content']['comment_num'])
-        post_detail.author_id = post_content['author']['user_id']
-        post_detail.author_name = post_content['author']['user_name']
+        post_detail.content = get_dict_value('content', json_content)
+        post_detail.post_id = get_dict_value('post_id', json_content)
+        if post_detail.content == '':
+            content_html = content.select('#post_content_%s' % (post_detail.post_id))
+            if len(content_html) != 0:
+                post_detail.content = content_html[0].text
+                _imgs = content_html[0].find_all('img')
+                img_paths = []
+                for img in _imgs:
+                    img_paths.append(img.attrs['src'])
+                post_detail.imgs = img_paths
+        else:
+            post_detail.set_content_imgs()
+        post_detail.post_no = get_dict_value('post_no', json_content)
+        post_detail.thread_id = _post.thread_id
+        post_detail.reply_num = get_dict_value('comment_num', json_content)
+        post_detail.author_id = get_dict_value('user_id', json_author)
+        post_detail.author_name = get_dict_value('user_name', json_author)
         if post_detail.author_name is None:
             post_detail.author_name = '该用户已不存在'
-        post_detail.author_nickname = post_content['author']['user_nickname']
-        post_detail.author_portrait = post_content['author']['portrait']
+        post_detail.author_nickname = get_dict_value('user_nickname', json_author)
+        post_detail.author_portrait = get_dict_value('portrait', json_author)
         post_detail.author_pic = content.select("a.p_author_face > img")[0].attrs['src']
-        core_reply_tail_clearfixs = content.select(".core_reply_tail.clearfix")[0].select("span.tail-info")
-        if len(core_reply_tail_clearfixs) >= 3:
-            post_detail.floor = core_reply_tail_clearfixs[1].text
-            post_detail.date = core_reply_tail_clearfixs[2].text
-        else:
-            post_detail.floor = core_reply_tail_clearfixs[0].text
-            post_detail.date = core_reply_tail_clearfixs[1].text
+        post_detail.floor = '%s%s' % (get_dict_value('post_no', json_content), '楼')
+        post_detail.date = get_dict_value('date', json_content)
         # 添加评论
         if post_detail.reply_num > 0:
             set_post_comment(post_detail)
         _post.details.append(post_detail)
-
     if _post.currNum < int(_post.pageNum):
         _post.currNum = _post.currNum + 1
         set_post_detail(_post)
@@ -112,9 +139,13 @@ def set_post_list(tieba):
         tieba.posts = []
     r = requests.get(tieba.get_url())
     soup = BeautifulSoup(r.text, "lxml")
+    if len(soup.select('.icon-attention')) != 0 and soup.select('.icon-attention')[0].text == '抱歉，根据相关法律法规和政策，本吧暂不开放。':
+        tieba.isMiss = 0
+        return
     lis = soup.select('li.j_thread_list.clearfix')
     if tieba.currNum == 1:
-        tieba.pageNum = int(int(str(soup.select('.last.pagination-item')[0].attrs['href']).split("pn=")[1]) / 50) - 1
+        if len(soup.select('.last.pagination-item')) > 0:
+            tieba.pageNum = int(int(str(soup.select('.last.pagination-item')[0].attrs['href']).split("pn=")[1]) / 50) - 1
         tieba_title = soup.select(".card_top_wrap.clearfix.card_top_theme")[0]
         tieba.menNum = tieba_title.select(".card_num")[0].select('.card_menNum')[0].text
         tieba.infoNum = tieba_title.select(".card_num")[0].select('.card_infoNum')[0].text
@@ -168,7 +199,7 @@ def save_post(_post):
                         comment.content, comment.username, comment.now_time)
                     post_file.write(comment_str)
             post_file.write('\n\n')
-            imgs = detail.get_content_imgs()
+            imgs = detail.imgs
             for img in imgs:
                 save_img(img, tieba_path + '\\' + str(_post.id) + '\\' + str(detail.post_id) + '\\')
 
@@ -215,8 +246,11 @@ if __name__ == '__main__':
         tieBa_name = "一蓑烟雨"
     tieba = TieBa(name=tieBa_name, maxNum=maxNum)
     set_post_list(tieba)
-    _post_list = tieba.posts
-    print(len(_post_list))
-    for post in _post_list:
-        set_post_detail(post)
-        save_post(post)
+    if tieba.isMiss == 0:
+        print('该吧不存在')
+    else:
+        _post_list = tieba.posts
+        print(len(_post_list))
+        for post in _post_list:
+            set_post_detail(post)
+            save_post(post)

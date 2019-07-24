@@ -7,13 +7,14 @@
 @time: 2019/7/10 9:50
 @desc: 帖子信息类
 """
-import time
+import re
 
 from bs4 import BeautifulSoup
 
 
 class TieBa(object):
-    def __init__(self, name=None, pageNum=None, maxNum=None):
+    def __init__(self, name=None, pageNum=1, maxNum=None,
+                 isMiss=1):
         self.name = name
         self.pageNum = pageNum
         self.currNum = 1
@@ -22,6 +23,7 @@ class TieBa(object):
         self.slogan = ''
         self.maxNum = maxNum
         self.posts = None
+        self.isMiss = isMiss
 
     def get_url(self):
         return "https://tieba.baidu.com/" + self.name + "?pn=" + str((self.currNum - 1) * 50)
@@ -60,7 +62,8 @@ class Post(object):
 class PostDetail(object):
 
     def __init__(self, content=None, author_name=None, author_id=None, author_portrait=None, thread_id=None,
-                 author_nickname=None, author_pic=None, post_no=None, post_id=None, reply_num=0, comments=None):
+                 author_nickname=None, author_pic=None, post_no=None, post_id=None, reply_num=0, comments=None
+                 , imgs=None):
         self.content = content
         self.content_text = None
         self.author_name = author_name
@@ -76,6 +79,7 @@ class PostDetail(object):
         self.floor = ''
         self.date = None
         self.comment_curr_num = 1
+        self.imgs = imgs
 
     def get_comment_url(self):
         return "https://tieba.baidu.com/p/comment?tid=" + str(self.thread_id) + "&pid=" + str(
@@ -88,16 +92,16 @@ class PostDetail(object):
         else:
             return BeautifulSoup(self.content, "lxml").text
 
-    def get_content_imgs(self):
+    def set_content_imgs(self):
         if self.content is None:
-            return []
+            self.imgs = []
         else:
             soup = BeautifulSoup(self.content, "lxml")
-            imgs = soup.find_all('img')
+            _imgs = soup.find_all('img')
             img_paths = []
-            for img in imgs:
+            for img in _imgs:
                 img_paths.append(img.attrs['src'])
-            return img_paths
+            self.imgs = img_paths
 
 
 class PostComment(object):
@@ -112,3 +116,13 @@ class PostComment(object):
         self.ptype = None
         self.come_from = None
         self.during_time = None
+
+
+if __name__ == '__main__':
+    with open('C:\\Users\\Administrator\\Desktop\\script.txt', 'r', encoding='utf-8') as f:
+        str = f.read()
+        # print(re.findall(r"\"thread_id\":\"(.+?)\",", str))
+        print(re.findall("thread_id(.+?),", str))
+        print(str)
+        print(re.findall('\d+','":"5466413161"'))
+
